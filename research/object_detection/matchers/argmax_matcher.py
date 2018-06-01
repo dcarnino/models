@@ -163,18 +163,25 @@ class ArgMaxMatcher(matcher.Matcher):
                                                      -1)
 
       if self._force_match_for_each_row:
-        similarity_matrix_shape = shape_utils.combined_static_and_dynamic_shape(
-            similarity_matrix)
-        force_match_column_ids = tf.argmax(similarity_matrix, 1,
-                                           output_type=tf.int32)
-        force_match_column_indicators = tf.one_hot(
-            force_match_column_ids, depth=similarity_matrix_shape[1])
-        force_match_row_ids = tf.argmax(force_match_column_indicators, 0,
-                                        output_type=tf.int32)
-        force_match_column_mask = tf.cast(
-            tf.reduce_max(force_match_column_indicators, 0), tf.bool)
-        final_matches = tf.where(force_match_column_mask,
-                                 force_match_row_ids, matches)
+        def _force_match():
+          similarity_matrix_shape = shape_utils.combined_static_and_dynamic_shape(
+              similarity_matrix)
+          force_match_column_ids = tf.argmax(similarity_matrix, 1,
+                                             output_type=tf.int32)
+          force_match_column_indicators = tf.one_hot(
+              force_match_column_ids, depth=similarity_matrix_shape[1])
+          force_match_row_ids = tf.argmax(force_match_column_indicators, 0,
+                                          output_type=tf.int32)
+          force_match_column_mask = tf.cast(
+              tf.reduce_max(force_match_column_indicators, 0), tf.bool)
+          final_matches = tf.where(force_match_column_mask,
+                                   force_match_row_ids, matches)
+          return final_matches
+        final_matches = tf.cond(
+          tf.greater(tf.shape(similarity_matrix)[1], 0),
+          true_fn=_force_match,
+          false_fn=lambda: matches)
+        
         return final_matches
       else:
         return matches
